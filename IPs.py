@@ -63,6 +63,15 @@ class IPs(object):
             return 0
         else:
             return self.ip1-self.ip0+1
+            
+    def __eq__(self, other):
+        if not (isinstance(other, IPs)):
+            return False
+        
+        if self.ip0==other.ip0 and self.ip1==other.ip1:
+            return True
+        else:
+            return False
         
     def __iter__(self):
         return self
@@ -76,6 +85,7 @@ class IPs(object):
             self.ipi+=1
             return val
         else:
+            self.ipi = self.ip0
             raise StopIteration
         
     def isIncluded(self, ip):
@@ -193,6 +203,7 @@ class MultiIPs(IPs):
                     self.lsti += 1
             return val
         
+        self.ipi = -1
         raise StopIteration
         
     def isIncluded(self, ip):
