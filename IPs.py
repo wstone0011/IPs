@@ -126,7 +126,7 @@ class MultiIPs(IPs):
             if l[1]>=r[1]:
                 log["bFlagMerged"] = True
                 log["ret"] = l
-            elif l[1]>=r[0] and l[1]<r[1]:
+            elif l[1]+1>=r[0] and l[1]<r[1]:
                 log["bFlagMerged"] = True
                 log["ret"] = [l[0], r[1]]
             else:
@@ -160,6 +160,25 @@ class MultiIPs(IPs):
         for _ in self.lst_ips_num:
             num += _[1]-_[0]+1
         return num
+        
+    def __eq__(self, other):
+        if not (isinstance(other, MultiIPs)):
+            return False
+            
+        if len(self)!=len(other):
+            return False
+        
+        bFlag = True
+        for i in range(0, len(self.lst_ips_num)):
+            l = self.lst_ips_num[i]
+            r = other.lst_ips_num[i]
+            if l[0]==r[0] and l[1]==r[1]:
+                continue
+            else:
+                bFlag = False
+                break
+        
+        return bFlag
         
     def next(self):  #python2
         for i in range(self.lsti, len(self.lst_ips_num)):
