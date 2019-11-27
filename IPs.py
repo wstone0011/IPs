@@ -1,130 +1,69 @@
 import struct
 import socket
 import re
-
+        
 class IPs(object):
-    def __init__(self, ips):
-        try:
-            self.ip0 = 0
-            self.ip1 = 0
-            self.ipi = self.ip0
-            self.bNull = False
-            
-            if "/" in ips:
-                #192.168.0.101/29
-                ip, mask = ips.split("/")
-                mask = int(mask)
-                start= self.ip2int(ip)
-                start &= 0xFFFFFFFF<<(32-mask)
-                end = start|(0xFFFFFFFF>>mask )
-                self.ip0 = start
-                self.ip1 = end
-                self.ipi = self.ip0
-                
-            elif "-" in ips:
-                ip,max_ipd = ips.split("-")
-                if "." not in max_ipd:
-                    #192.168.0.97-101
-                    max_ipd = int(max_ipd)
-                    start=self.ip2int(ip)
-                    end  = (start&0xFFFFFF00)|max_ipd
-                    self.ip0 = start
-                    self.ip1 = end
-                    self.ipi = self.ip0
-                    
-                else:
-                    #192.168.2.97-192.168.2.101
-                    start= self.ip2int(ip)
-                    end  = self.ip2int(max_ipd)
-                    self.ip0 = start
-                    self.ip1 = end
-                    self.ipi = self.ip0
+    def __init__(self, *args):
+        lst_ips = []
+        lst_ips_num = []
+        for _ in args:
+            if isinstance(_, str):
+                lst_ips += [_]
+            elif isinstance(_, list):
+                for II in _:
+                    if isinstance(II, str):
+                        lst_ips += [II]
+                    elif isinstance(II, tuple):
+                        lst_ips_num += [II]
+                    elif isinstance(II, IPs):
+                        lst_ips_num += II.values(type="int")
+                    else:
+                        raise RuntimeError("init error, not supported args: %s"%II)
+            elif isinstance(_, IPs):
+                lst_ips_num += _.values(type="int")
             else:
-                #192.168.2.97
-                ip=ips
+                raise RuntimeError("init error, not supported args: %s"%_)
+                
+        lst = []
+        for _ in lst_ips:
+            (start, end) = self.parseIpRange2IntRange(_)
+            if start<=end:
+                lst += [(start, end)]  # [(ip_num0, ip_num1), ...]
+        
+        lst += lst_ips_num
+        lst = self.mergeIPs(lst)
+        self.lst_ips_num = sorted(lst, key=lambda x: x[0])
+        self.lsti = 0
+        self.ipi = -1
+        
+    def parseIpRange2IntRange(self, ip_range):
+        start = 0
+        end = 0
+        if "/" in ip_range:
+            #192.168.0.101/29
+            ip, mask = ip_range.split("/")
+            mask = int(mask)
+            start= self.ip2int(ip)
+            start &= 0xFFFFFFFF<<(32-mask)
+            end = start|(0xFFFFFFFF>>mask )
+        elif "-" in ip_range:
+            ip,max_ipd = ip_range.split("-")
+            if "." not in max_ipd:
+                #192.168.0.97-101
+                max_ipd = int(max_ipd)
+                start=self.ip2int(ip)
+                end  = (start&0xFFFFFF00)|max_ipd
+            else:
+                #192.168.2.97-192.168.2.101
                 start= self.ip2int(ip)
-                end  = self.ip2int(ip)
-                self.ip0 = start
-                self.ip1 = end
-                self.ipi = self.ip0
-                
-            if self.ip0 > self.ip1:
-                self.bNull = True
-                
-        except Exception as e:
-            print(e)
-            self.bNull = True
-    
-    def __str__(self):
-        return "%s-%s"%(self.int2ip(self.ip0), self.int2ip(self.ip1))
-        
-    def __len__(self):
-        if self.bNull:
-            return 0
+                end  = self.ip2int(max_ipd)
         else:
-            return self.ip1-self.ip0+1
-            
-    def __eq__(self, other):
-        if not (isinstance(other, IPs)):
-            return False
+            #192.168.2.97
+            ip=ip_range
+            start= self.ip2int(ip)
+            end  = self.ip2int(ip)
         
-        if self.ip0==other.ip0 and self.ip1==other.ip1:
-            return True
-        else:
-            return False
-        
-    def __iter__(self):
-        return self
-        
-    def __next__(self):
-        return self.next()
-        
-    def next(self):  #python2
-        if self.ipi >= self.ip0 and self.ipi <= self.ip1:
-            val = self.int2ip(self.ipi)
-            self.ipi+=1
-            return val
-        else:
-            self.ipi = self.ip0
-            raise StopIteration
-        
-    def isIncluded(self, ip):
-        ip_num = self.ip2int(ip)
-        return ip_num>=self.ip0 and ip_num<=self.ip1
-        
-    @staticmethod
-    def ip2int(ip):
-        return struct.unpack("!I", socket.inet_aton(ip))[0]
-    
-    @staticmethod
-    def int2ip(ip_num):
-        return socket.inet_ntoa(struct.pack("!I", ip_num))
-    
-    @staticmethod
-    def isIPv4(ip):
-        IP_PATTERN = "^((0|[1-9]\d?|[0-1]\d{2}|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|[0-1]\d{2}|2[0-4]\d|25[0-5])$"
-        if not ip:
-            return False
-        filter = re.compile(IP_PATTERN, re.I)
-        return True if filter.match(ip.strip()) else False
-        
-        
-class MultiIPs(IPs):
-    def __init__(self, lst_ips):
-        try:
-            self.lst_ips_num = []
-            
-            lst = []
-            for _ in lst_ips:
-                m = IPs(_)
-                lst.append([m.ip0, m.ip1])
-            
-            lst = self.mergeIPs(lst)
-            self.lst_ips_num = sorted(lst, key=lambda x: x[0])
-            self.lsti = 0
-            self.ipi = -1
-        except Exception as e:
-            print(e)
+        return (start, end)
     
     def mergeIPs(self, lst):
         def _merge(l, r, log):
@@ -138,7 +77,7 @@ class MultiIPs(IPs):
                 log["ret"] = l
             elif l[1]+1>=r[0] and l[1]<r[1]:
                 log["bFlagMerged"] = True
-                log["ret"] = [l[0], r[1]]
+                log["ret"] = (l[0], r[1])
             else:
                 log["bFlagMerged"] = False
             
@@ -159,11 +98,17 @@ class MultiIPs(IPs):
                     
             return lst
             
+    def values(self, type="str"):
+        lst = []
+        if "str"==type:
+            for _ in self.lst_ips_num:
+                lst += ["%s-%s"%(self.int2ip(_[0]), self.int2ip(_[1]))]
+        elif "int"==type:
+            lst = self.lst_ips_num[:]
+        return lst
+        
     def __str__(self):
-        s = ""
-        for _ in self.lst_ips_num:
-            s += "%s-%s\n"%(self.int2ip(_[0]), self.int2ip(_[1]))
-        return s
+        return "\n".join(self.values())
         
     def __len__(self):
         num = 0
@@ -171,10 +116,8 @@ class MultiIPs(IPs):
             num += _[1]-_[0]+1
         return num
         
-    def __eq__(self, other):
-        if not (isinstance(other, MultiIPs)):
-            return False
-            
+    def __eq__(self, other):  # ==
+        other = IPs(other)
         if len(self)!=len(other):
             return False
         
@@ -190,6 +133,74 @@ class MultiIPs(IPs):
         
         return bFlag
         
+    def __or__(self, other):  # |
+        other = IPs(other)
+        lst_ips_num = self.values(type="int")
+        lst_ips_num += other.values(type="int")
+        lst = self.mergeIPs(lst_ips_num)
+        lst_ips_num = sorted(lst, key=lambda x: x[0])
+        return IPs(lst_ips_num)
+        
+    def __and__(self, other):  # &
+        other = IPs(other)
+        A = self-other
+        B = other-self
+        return (self|other)-(A|B)
+        
+    def __sub__(self, other):  # -
+        other = IPs(other)
+        lst0 = self.values(type="int")
+        lst1 = other.values(type="int")
+        
+        lst = []
+        for l in lst0:
+            for r in lst1:
+                if r[1]<l[0]:                                    # --- .......
+                    continue
+                elif r[0]<=l[0] and r[1]>=l[0] and r[1]<=l[1]:   #    ---.....
+                    (c, d) = (r[1]+1, l[1])
+                    if c<=d:
+                        l = (c, d)
+                    else:
+                        l = None
+                        break
+                elif r[0]>=l[0] and r[1]<=l[1]:                  #     .---...
+                    (a, b) = (l[0], r[0]-1)
+                    if a<=b:
+                        lst += [(a, b)]
+                        
+                    (c, d) = (r[1]+1, l[1])
+                    if c<=d:
+                        l = (c, d)
+                    else:
+                        l = None
+                        break
+                elif r[0]>=l[0] and r[0]<=l[1] and r[1]>l[1]:    #     .....---
+                    (a, b) = (l[0], r[0]-1)
+                    if a<=b:
+                        lst += [(a, b)]
+                    l = None
+                    break
+                elif r[0]>l[1]:                                  #     .......   ---
+                    lst += [(l[0], l[1])]
+                    l = None
+                    break
+                elif r[0]<=l[0] and r[1]>=l[1]:                  #   ----------------
+                    l = None
+                    break
+            
+            if l and l[0]<=l[1]:
+                lst += [(l[0], l[1])]
+                l = None
+                    
+        return IPs(lst)
+        
+    def __iter__(self):
+        return self
+        
+    def __next__(self):
+        return self.next()
+        
     def next(self):  #python2
         for i in range(self.lsti, len(self.lst_ips_num)):
             lst = self.lst_ips_num[i]
@@ -203,16 +214,29 @@ class MultiIPs(IPs):
                     self.lsti += 1
             return val
         
+        self.lsti = 0
         self.ipi = -1
         raise StopIteration
         
-    def isIncluded(self, ip):
-        ip_num = self.ip2int(ip)
-        bFlag = False
-        for _ in self.lst_ips_num:
-            if ip_num>=_[0] and ip_num<=_[1]:
-                bFlag = True
-                break
-                
-        return bFlag
+    def contain(self, *args):
+        return (self|IPs(*args))==self
+        
+    @staticmethod
+    def ip2int(ip):
+        if IPs.isIPv4(ip):
+            return struct.unpack("!I", socket.inet_aton(ip))[0]
+        else:
+            raise RuntimeError("invalid IPv4: %s"%ip)
+    
+    @staticmethod
+    def int2ip(ip_num):
+        return socket.inet_ntoa(struct.pack("!I", ip_num))
+    
+    @staticmethod
+    def isIPv4(ip):
+        IP_PATTERN = "^((0|[1-9]\d?|[0-1]\d{2}|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|[0-1]\d{2}|2[0-4]\d|25[0-5])$"
+        if not ip:
+            return False
+        filter = re.compile(IP_PATTERN, re.I)
+        return True if filter.match(ip.strip()) else False
         
