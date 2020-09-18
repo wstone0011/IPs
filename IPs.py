@@ -37,26 +37,56 @@ class IPs(object):
         self.ipi = -1
         
     def parseIpRange2IntRange(self, ip_range):
+        ip_range = ip_range.strip()
         start = 0
         end = 0
         if "/" in ip_range:
             #192.168.0.101/29
             ip, mask = ip_range.split("/")
             mask = int(mask)
+            if mask<0 or mask>32:
+                raise RuntimeError("invalid mask: %d"%mask)
             start= self.ip2int(ip)
             start &= 0xFFFFFFFF<<(32-mask)
             end = start|(0xFFFFFFFF>>mask )
         elif "-" in ip_range:
-            ip,max_ipd = ip_range.split("-")
-            if "." not in max_ipd:
-                #192.168.0.97-101
-                max_ipd = int(max_ipd)
-                start=self.ip2int(ip)
-                end  = (start&0xFFFFFF00)|max_ipd
-            else:
+            start = -1
+            end   = -1
+            filter = re.compile("^(\d+)\.(\d+)\.(\d+)\.(\d+)-(\d+)\.(\d+)\.(\d+)\.(\d+)$")
+            res = filter.findall(ip_range)
+            if res and res[0]:
                 #192.168.2.97-192.168.2.101
-                start= self.ip2int(ip)
-                end  = self.ip2int(max_ipd)
+                record = res[0]
+                start= self.ip2int( "%s.%s.%s.%s"%(record[0],record[1],record[2],record[3]) )    #如果 res[i] 不在 0~255 之内，ip2int 会报异常。
+                end  = self.ip2int( "%s.%s.%s.%s"%(record[4],record[5],record[6],record[7]) )
+            else:
+                filter = re.compile("^(\d+)\.(\d+)\.(\d+)\.(\d+)-(\d+)$")
+                res = filter.findall(ip_range)
+                if res and res[0]:
+                    #192.168.2.97-101       IP区间
+                    record = res[0]
+                    start= self.ip2int( "%s.%s.%s.%s"%(record[0],record[1],record[2],record[3]) )
+                    end  = self.ip2int( "%s.%s.%s.%s"%(record[0],record[1],record[2],record[4]) )
+                else:
+                    filter = re.compile("^(\d+)\.(\d+)\.(\d+)-(\d+)$")
+                    res = filter.findall(ip_range)
+                    if res and res[0]:
+                        #192.168.2-4        C类网段区间
+                        record = res[0]
+                        start= self.ip2int( "%s.%s.%s.0"%(record[0],record[1],record[2]) )
+                        end  = self.ip2int( "%s.%s.%s.255"%(record[0],record[1],record[3]) )
+                    else:
+                        filter = re.compile("^(\d+)\.(\d+)-(\d+)$")
+                        res = filter.findall(ip_range)
+                        if res and res[0]:
+                            #192.1-254      B类网段区间
+                            record = res[0]
+                            start= self.ip2int( "%s.%s.0.0"%(record[0],record[1]) )
+                            end  = self.ip2int( "%s.%s.255.255"%(record[0],record[2]) )
+                            
+            if start==-1 or end==-1:
+                raise RuntimeError("invalid argument: %s"%ip_range)
+            
         else:
             #192.168.2.97
             ip=ip_range
@@ -67,8 +97,6 @@ class IPs(object):
     
     def mergeIPs(self, lst):
         def _merge(l, r, log):
-            bFlagMerged = False
-            
             if l[0]>r[0]:
                 l,r = r,l
                 
