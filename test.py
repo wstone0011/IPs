@@ -2,10 +2,10 @@
 from IPs import IPs
 from IPs import IPs
 
-ips = IPs(["192.168.1.11-100"])
+ips = IPs([u"192.168.1.11-100"])
 print("-"*16)
 print("|")
-print(ips|"192.168.1.97-110")
+print(ips|u"192.168.1.97-110")
 print("-"*16)
 print("sub")
 print(ips-["192.168.1.10-12", "192.168.1.22-22", "192.168.1.33-39", "192.168.1.89-110"])
@@ -91,3 +91,9 @@ for _ in ips2:
     print(_)
 
 print("ips==ips2 : %s"%(ips==ips2))
+
+print("-"*16)
+lst = ["192.168.1.1-5", "192.168.0.8-9", "192.168.2.2"]
+ips = IPs(lst)
+print(ips.hasIP("192.168.1.1"))
+print(ips.hasIP("192.168.1.6"))

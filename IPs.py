@@ -1,17 +1,23 @@
+#encoding:utf-8
 import struct
 import socket
 import re
-        
+
+try:
+    unicode = unicode
+except NameError:
+    unicode = str
+    
 class IPs(object):
     def __init__(self, *args):
         lst_ips = []
         lst_ips_num = []
         for _ in args:
-            if isinstance(_, str):
+            if isinstance(_, str) or isinstance(_, unicode):
                 lst_ips += [_]
             elif isinstance(_, list):
                 for II in _:
-                    if isinstance(II, str):
+                    if isinstance(II, str) or isinstance(II, unicode):
                         lst_ips += [II]
                     elif isinstance(II, tuple):
                         lst_ips_num += [II]
@@ -109,22 +115,32 @@ class IPs(object):
             else:
                 log["bFlagMerged"] = False
             
-        if len(lst)<=1:
-            return lst
-        else:
-            for i in range(0, len(lst)-1):
-                l = lst[i]
-                for j in range(i+1, len(lst)):
-                    r = lst[j]
-                    log = {}
-                    _merge(l, r, log)
-                    if log["bFlagMerged"]:
-                        lst.remove(l)
-                        lst.remove(r)
-                        lst.append(log["ret"])
-                        return self.mergeIPs(lst)
+
+        while 1:
+            if len(lst)<=1:
+                return lst
+            else:
+                bMerged = False
+                for i in range(0, len(lst)-1):
+                    l = lst[i]
+                    for j in range(i+1, len(lst)):
+                        r = lst[j]
+                        log = {}
+                        _merge(l, r, log)
+                        if log["bFlagMerged"]:
+                            lst.remove(l)
+                            lst.remove(r)
+                            lst.append(log["ret"])
+                            bMerged = True
+                            break
+
+                    if bMerged:
+                        break
+                
+                if not bMerged:    #如果没有合并发生，跳出大循环，并返回
+                    break
                     
-            return lst
+        return lst
             
     def values(self, type="str"):
         lst = []
@@ -248,6 +264,25 @@ class IPs(object):
         
     def contain(self, *args):
         return (self|IPs(*args))==self
+
+    def hasIP(self, ip):    #使用二分法查找IP
+        if not self.lst_ips_num:
+            return False
+
+        num = self.ip2int(ip)
+        i = 0
+        j = len(self.lst_ips_num)-1
+        while 1:
+            k = int( (i+j)/2 )
+            if num<self.lst_ips_num[k][0]:
+                j=k-1
+            elif num>=self.lst_ips_num[k][0] and num<=self.lst_ips_num[k][1]:
+                return True
+            elif num>self.lst_ips_num[k][1]:
+                i=k+1
+
+            if i>j:
+                return False
         
     @staticmethod
     def ip2int(ip):
