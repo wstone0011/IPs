@@ -2,6 +2,7 @@
 import struct
 import socket
 import re
+import bisect
 
 try:
     unicode = unicode
@@ -37,8 +38,7 @@ class IPs(object):
                 lst += [(start, end)]  # [(ip_num0, ip_num1), ...]
         
         lst += lst_ips_num
-        lst = self.mergeIPs(lst)
-        self.lst_ips_num = sorted(lst, key=lambda x: x[0])
+        self.lst_ips_num = self.mergeRanges([], lst)
         self.lsti = 0
         self.ipi = -1
         
@@ -101,46 +101,42 @@ class IPs(object):
         
         return (start, end)
     
-    def mergeIPs(self, lst):
-        def _merge(l, r, log):
-            if l[0]>r[0]:
-                l,r = r,l
-                
-            if l[1]>=r[1]:
-                log["bFlagMerged"] = True
-                log["ret"] = l
-            elif l[1]+1>=r[0] and l[1]<r[1]:
-                log["bFlagMerged"] = True
-                log["ret"] = (l[0], r[1])
-            else:
-                log["bFlagMerged"] = False
-            
+    def addRange(self, iv, R):
+        left, right = R
+        
+        if not iv:
+            iv.append((left, right))
+            return
 
-        while 1:
-            if len(lst)<=1:
-                return lst
-            else:
-                bMerged = False
-                for i in range(0, len(lst)-1):
-                    l = lst[i]
-                    for j in range(i+1, len(lst)):
-                        r = lst[j]
-                        log = {}
-                        _merge(l, r, log)
-                        if log["bFlagMerged"]:
-                            lst.remove(l)
-                            lst.remove(r)
-                            lst.append(log["ret"])
-                            bMerged = True
-                            break
+        p = bisect.bisect_left(iv, (left, right))    #根据left判断插入位置，如果有重复数据，插在左边。这里确定了左边界
+        p -= 1
 
-                    if bMerged:
-                        break
-                
-                if not bMerged:    #如果没有合并发生，跳出大循环，并返回
-                    break
-                    
-        return lst
+        if p >= 0:
+            if iv[p][1] >= right:
+                return
+
+            if iv[p][1] >= left - 1:
+                left = iv[p][0]
+                del iv[p]
+                p -= 1
+
+        while True:
+            p += 1
+            if p >= len(iv) or iv[p][1] > right:      #跳过 (left, right) 覆盖的节点，寻找右边界
+                break
+            del iv[p]
+            p -= 1
+
+        if p < len(iv) and iv[p][0] <= right + 1:     #纠正右边界
+            right = iv[p][1]
+            del iv[p]
+
+        iv.insert(p, (left, right))
+
+    def mergeRanges(self, iv=[], ranges=[]):
+        for R in ranges:
+            self.addRange(iv, R)
+        return iv
             
     def values(self, type="str"):
         lst = []
@@ -179,138 +175,13 @@ class IPs(object):
         
     def __or__(self, other):  # |
         other = IPs(other)
-
+        
         # 两个对象的lst_ips_num都是有序的，把一个往另一个里面插入即可
         lst_a = self.values(type="int")
-        len_a = len(lst_a)
         lst_b = other.values(type="int")
-        len_b = len(lst_b)
-
-        if 0==len_a:
-            return other
-        
-        if 0==len_b:
-            return self
-
-        for r in lst_b:
-            A=0
-            B=len_a-1
-            i=int( (A+B)/2 )
-            J=-1      # 没找到，超范围了
-            while A<=B:
-                if i==0:
-                    if r[0]<=lst_a[i][0]:
-                        J=i
-                        break
-                    else:
-                        A=i+1
-                        i=int( (A+B)/2 )
-                elif r[0]>lst_a[i-1][0] and r[0]<=lst_a[i][0]:
-                    J=i
-                    break
-                elif r[0]<=lst_a[i-1][0]:
-                    B=i-1
-                    i=int( (A+B)/2 )
-                elif r[0]>lst_a[i][0]:
-                    A=i+1
-                    i=int( (A+B)/2 )
-
-            A=0
-            B=len_a-1
-            i=int( (A+B)/2 )
-            K=-1      # 没找到，超范围了
-            while A<=B:
-                if i==0:
-                    if r[1]<=lst_a[i][1]:
-                        K=i
-                        break
-                    else:
-                        A=i+1
-                        i=int( (A+B)/2 )
-                elif r[1]>lst_a[i-1][1] and r[1]<=lst_a[i][1]:
-                    K=i
-                    break
-                elif r[1]<=lst_a[i-1][1]:
-                    B=i-1
-                    i=int( (A+B)/2 )
-                elif r[1]>lst_a[i][1]:
-                    A=i+1
-                    i=int( (A+B)/2 )
-
-
-            lst = []
-            if J==-1:      ##J==-1, K==-1         #J K, -1 -1, n -1, n n
-                lst_a = lst_a+[r]
-                len_a = len(lst_a)
-
-            elif K==-1:    #J!=-1, K==-1
-                if J==0:
-                    lst_a = [r]           #这种情况属于完全覆盖
-                    len_a = len(lst_a)
-                else:
-                    for i in range(0, J-1):   #J-1的前一个 不受影响
-                        lst.append(lst_a[i])
-
-                    if r[0]<=lst_a[J-1][1]+1:    #左连 右离
-                        t = (lst_a[J-1][0], r[1])
-                        lst.append(t)
-                    elif r[0]>lst_a[J-1][1]+1:    #左离 右离
-                        lst.append(lst_a[J-1])
-                        lst.append(r)
-
-                    lst_a = lst
-                    len_a = len(lst_a)
-
-            else:          #J!=-1, K!=-1
-                if J==0:
-                    if r[1]<lst_a[K][0]-1:    #左离 右离
-                        lst.append(r)
-                        for i in range(K, len_a):
-                            lst.append(lst_a[i])
-
-                    elif r[1]>=lst_a[K][0]-1:   #左离 右连 
-                        t = (r[0], lst_a[K][1])
-                        lst.append(t)
-                        for i in range(K+1, len_a):
-                            lst.append(lst_a[i])
-                            
-                    lst_a = lst
-                    len_a = len(lst_a)
-
-                else:
-                    for i in range(0, J-1):   #J-1的前一个 和 K的后一个不受影响
-                        lst.append(lst_a[i])
-
-                    if r[0]<=lst_a[J-1][1]+1 and r[1]<lst_a[K][0]-1:    #左连 右离
-                        t = (lst_a[J-1][0], r[1])
-                        lst.append(t)
-                        for i in range(K, len_a):
-                            lst.append(lst_a[i])
-
-                    elif r[0]>lst_a[J-1][1]+1 and r[1]<lst_a[K][0]-1:    #左离 右离
-                        lst.append(lst_a[J-1])
-                        lst.append(r)
-                        for i in range(K, len_a):
-                            lst.append(lst_a[i])
-                            
-                    elif r[0]<=lst_a[J-1][1]+1 and r[1]>=lst_a[K][0]-1:  #左连 右连
-                        t = (lst_a[J-1][0], lst_a[K][1])
-                        lst.append(t)
-                        for i in range(K+1, len_a):
-                            lst.append(lst_a[i])
-                        
-                    elif r[0]>lst_a[J-1][1]+1 and r[1]>=lst_a[K][0]-1:   #左离 右连
-                        lst.append(lst_a[J-1])
-                        t = (r[0], lst_a[K][1])
-                        lst.append(t)
-                        for i in range(K+1, len_a):
-                            lst.append(lst_a[i])
-
-                    lst_a = lst
-                    len_a = len(lst_a)
 
         obj = IPs()
-        obj.lst_ips_num = lst_a
+        obj.lst_ips_num = self.mergeRanges(lst_a, lst_b)
         return obj
         
     def __and__(self, other):  # &
