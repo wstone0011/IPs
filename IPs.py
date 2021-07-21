@@ -179,11 +179,139 @@ class IPs(object):
         
     def __or__(self, other):  # |
         other = IPs(other)
-        lst_ips_num = self.values(type="int")
-        lst_ips_num += other.values(type="int")
-        lst = self.mergeIPs(lst_ips_num)
-        lst_ips_num = sorted(lst, key=lambda x: x[0])
-        return IPs(lst_ips_num)
+
+        # 两个对象的lst_ips_num都是有序的，把一个往另一个里面插入即可
+        lst_a = self.values(type="int")
+        len_a = len(lst_a)
+        lst_b = other.values(type="int")
+        len_b = len(lst_b)
+
+        if 0==len_a:
+            return other
+        
+        if 0==len_b:
+            return self
+
+        for r in lst_b:
+            A=0
+            B=len_a-1
+            i=int( (A+B)/2 )
+            J=-1      # 没找到，超范围了
+            while A<=B:
+                if i==0:
+                    if r[0]<=lst_a[i][0]:
+                        J=i
+                        break
+                    else:
+                        A=i+1
+                        i=int( (A+B)/2 )
+                elif r[0]>lst_a[i-1][0] and r[0]<=lst_a[i][0]:
+                    J=i
+                    break
+                elif r[0]<=lst_a[i-1][0]:
+                    B=i-1
+                    i=int( (A+B)/2 )
+                elif r[0]>lst_a[i][0]:
+                    A=i+1
+                    i=int( (A+B)/2 )
+
+            A=0
+            B=len_a-1
+            i=int( (A+B)/2 )
+            K=-1      # 没找到，超范围了
+            while A<=B:
+                if i==0:
+                    if r[1]<=lst_a[i][1]:
+                        K=i
+                        break
+                    else:
+                        A=i+1
+                        i=int( (A+B)/2 )
+                elif r[1]>lst_a[i-1][1] and r[1]<=lst_a[i][1]:
+                    K=i
+                    break
+                elif r[1]<=lst_a[i-1][1]:
+                    B=i-1
+                    i=int( (A+B)/2 )
+                elif r[1]>lst_a[i][1]:
+                    A=i+1
+                    i=int( (A+B)/2 )
+
+
+            lst = []
+            if J==-1:      ##J==-1, K==-1         #J K, -1 -1, n -1, n n
+                lst_a = lst_a+[r]
+                len_a = len(lst_a)
+
+            elif K==-1:    #J!=-1, K==-1
+                if J==0:
+                    lst_a = [r]           #这种情况属于完全覆盖
+                    len_a = len(lst_a)
+                else:
+                    for i in range(0, J-1):   #J-1的前一个 不受影响
+                        lst.append(lst_a[i])
+
+                    if r[0]<=lst_a[J-1][1]+1:    #左连 右离
+                        t = (lst_a[J-1][0], r[1])
+                        lst.append(t)
+                    elif r[0]>lst_a[J-1][1]+1:    #左离 右离
+                        lst.append(lst_a[J-1])
+                        lst.append(r)
+
+                    lst_a = lst
+                    len_a = len(lst_a)
+
+            else:          #J!=-1, K!=-1
+                if J==0:
+                    if r[1]<lst_a[K][0]-1:    #左离 右离
+                        lst.append(r)
+                        for i in range(K, len_a):
+                            lst.append(lst_a[i])
+
+                    elif r[1]>=lst_a[K][0]-1:   #左离 右连 
+                        t = (r[0], lst_a[K][1])
+                        lst.append(t)
+                        for i in range(K+1, len_a):
+                            lst.append(lst_a[i])
+                            
+                    lst_a = lst
+                    len_a = len(lst_a)
+
+                else:
+                    for i in range(0, J-1):   #J-1的前一个 和 K的后一个不受影响
+                        lst.append(lst_a[i])
+
+                    if r[0]<=lst_a[J-1][1]+1 and r[1]<lst_a[K][0]-1:    #左连 右离
+                        t = (lst_a[J-1][0], r[1])
+                        lst.append(t)
+                        for i in range(K, len_a):
+                            lst.append(lst_a[i])
+
+                    elif r[0]>lst_a[J-1][1]+1 and r[1]<lst_a[K][0]-1:    #左离 右离
+                        lst.append(lst_a[J-1])
+                        lst.append(r)
+                        for i in range(K, len_a):
+                            lst.append(lst_a[i])
+                            
+                    elif r[0]<=lst_a[J-1][1]+1 and r[1]>=lst_a[K][0]-1:  #左连 右连
+                        t = (lst_a[J-1][0], lst_a[K][1])
+                        lst.append(t)
+                        for i in range(K+1, len_a):
+                            lst.append(lst_a[i])
+                        
+                    elif r[0]>lst_a[J-1][1]+1 and r[1]>=lst_a[K][0]-1:   #左离 右连
+                        lst.append(lst_a[J-1])
+                        t = (r[0], lst_a[K][1])
+                        lst.append(t)
+                        for i in range(K+1, len_a):
+                            lst.append(lst_a[i])
+
+                    lst_a = lst
+                    len_a = len(lst_a)
+
+        obj = IPs()
+        obj.lst_ips_num = lst_a
+        return obj
         
     def __and__(self, other):  # &
         other = IPs(other)
